@@ -1,0 +1,50 @@
+# Python-Cache und Build-Ausgaben
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+build/
+dist/
+
+# Virtuelle Umgebungen
+.venv/
+venv/
+env/
+
+# Tests, Coverage und Analysewerkzeuge
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# IDEs und Betriebssystem
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Umgebungsvariablen und lokale Konfiguration
+.env
+.env.*
+!.env.example
+
+# Google OAuth: Client-Secrets und Zugriffstokens
+client_secret*.json
+credentials*.json
+*token*.json
+*.pem
+*.key
+
+# Lokaler Exportzustand
+.last_check
+
+# Persönliche FitDays+-Exporte
+*.csv
+!example/*.example.csv
+
+# Generierte FIT-Dateien und Logs
+*.fit
+*.log
