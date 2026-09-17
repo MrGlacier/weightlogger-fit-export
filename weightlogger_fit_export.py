@@ -869,7 +869,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Google-Drive-Datei-ID der CSV-Eingabedatei",
     )
     parser.add_argument(
-        "--google-drive-csv-file-name",
+        "--google-drive-csv-file-name", "-f",
         default="Gewicht.csv",
         help="Dateiname der CSV-Eingabedatei innerhalb des Zielordners in Google Drive",
     )
@@ -878,7 +878,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Google-Drive-Ordner-ID, in dem `.last_check` gespeichert wird",
     )
     parser.add_argument(
-        "--google-drive-folder-name",
+        "--google-drive-folder-name", "-d",
         default="FitDays-Export",
         help="Google-Drive-Ordnername, in dem CSV-Datei und `.last_check` liegen",
     )
