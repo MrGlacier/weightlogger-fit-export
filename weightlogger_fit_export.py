@@ -964,7 +964,9 @@ def main(argv: list[str]) -> int:
             folder_id=folder_id,
             local_path=local_last_check_path,
         )
-        print(f"Letzter Exportzeitpunkt: {last_check_date.isoformat()}")
+        berlin_time = last_check_date.astimezone(LOCAL_TIMEZONE)
+        formatted_date = berlin_time.strftime("%d.%m.%Y - %H:%M Uhr")
+        print(f"Letzter Exportzeitpunkt: \033[92m{formatted_date}\033[0m")
         return 0
 
     measurements: list[Measurement]
