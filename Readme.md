@@ -108,6 +108,20 @@ python weightlogger_fit_export.py \
 
 Wenn `--physique-rating` fehlt, versucht das Skript den Wert aus Körperfett und Muskelmasse abzuleiten.
 
+## Letzten Exportzeitpunkt anzeigen
+
+Mit `--check` (oder `-c`) kann der letzte Exportzeitpunkt angezeigt werden. Die Funktion sucht zuerst in Google Drive (wenn `--google-oauth-client-secret-file` angegeben ist), dann lokal und erstellt bei Bedarf eine neue `.last_check`-Datei:
+
+```bash
+# Lokal
+python weightlogger_fit_export.py --check
+
+# Mit Google Drive
+python weightlogger_fit_export.py \
+  --google-oauth-client-secret-file client_secret.json \
+  --check
+```
+
 ## Unterstützte CSV-Spalten
 
 | FitDays+-Spalte | Englischer Feldname | Verwendung |
@@ -159,6 +173,7 @@ Falls `Körperbau` fehlt, berechnet das Skript heuristisch einen Wert von 1 bis 
 | `--visceral-fat-rating`, `--bone-mass`, `--metabolic-age` | weitere Messwerte |
 | `--user-profile-index` | optionaler FIT-Benutzerprofil-Index |
 | `--bmi` | optionales, experimentelles BMI-Feld |
+| `--check`, `-c` | zeigt den letzten Exportzeitpunkt aus `.last_check` an (Google Drive, lokal oder neu erstellt) |
 | `--dry-run` | prüfen, ohne FIT-Datei oder `.last_check` zu verändern |
 | `--verbose` | zusätzliche Protokollausgaben |
 

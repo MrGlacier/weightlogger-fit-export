@@ -491,6 +491,27 @@ def resolve_google_drive_targets(
     return resolved_csv_file_id, resolved_folder_id
 
 
+def resolve_google_drive_folder_id(
+    drive_service,
+    folder_id: str | None,
+    folder_name: str | None,
+) -> str:
+    """Loest die Google-Drive-Ordner-ID auf, egal ob ueber direkte ID oder Namen."""
+    resolved_folder_id = folder_id
+    if resolved_folder_id is None:
+        if not folder_name:
+            raise ValueError(
+                "Entweder --google-drive-folder-id oder --google-drive-folder-name muss gesetzt sein."
+            )
+        folder = find_drive_folder_by_name(drive_service, folder_name)
+        if folder is None:
+            raise ValueError(f"Google-Drive-Ordner nicht gefunden: {folder_name}")
+        resolved_folder_id = folder["id"]
+
+    LOGGER.info("Google-Drive-Ordner aufgeloest: %s", resolved_folder_id)
+    return resolved_folder_id
+
+
 
 def read_last_check_from_drive(drive_service, folder_id: str) -> dt.datetime | None:
     """Liest den zuletzt exportierten Zeitstempel aus `.last_check` in Google Drive."""
@@ -534,6 +555,41 @@ def write_last_check_to_drive(drive_service, folder_id: str, timestamp: dt.datet
         fileId=existing_file["id"],
         media_body=media,
     ).execute()
+
+
+def get_last_check_date(
+    drive_service: object | None,
+    folder_id: str | None,
+    local_path: pathlib.Path,
+) -> dt.datetime:
+    """Ermittelt den letzten Exportzeitpunkt aus Google Drive, lokal oder einer neu erstellten Datei.
+
+    Diese Funktion sucht zuerst in Google Drive nach der `.last_check`-Datei im angegebenen Ordner.
+    Falls diese nicht existiert oder kein Drive-Service vorhanden ist, wird lokal im Dateisystem
+    nach einer `.last_check`-Datei gesucht. Wenn dort ebenfalls keine gefunden wird, wird eine
+    neue lokale Datei mit dem aktuellen Zeitstempel erstellt. Der ermittelte Zeitstempel wird
+    als datetime-Objekt zurückgegeben.
+    """
+    # 1. Versuch: Google Drive lesen
+    if drive_service is not None and folder_id is not None:
+        drive_timestamp = read_last_check_from_drive(drive_service, folder_id)
+        if drive_timestamp is not None:
+            return drive_timestamp
+
+    # 2. Versuch: Lokal lesen
+    if local_path.exists():
+        raw_value = local_path.read_text(encoding="utf-8").strip()
+        if raw_value:
+            timestamp = parse_timestamp(raw_value)
+            LOGGER.info("Letzter Exportzeitpunkt (lokal) geladen: %s", timestamp.isoformat())
+            return timestamp
+
+    # 3. Fallback: Lokale Datei neu erstellen
+    now = dt.datetime.now(dt.timezone.utc)
+    content = now.isoformat().replace("+00:00", "Z") + "\n"
+    local_path.write_text(content, encoding="utf-8")
+    LOGGER.info("Neue lokale %s erstellt mit aktuellem Zeitstempel: %s", local_path.name, now.isoformat())
+    return now
 
 
 
@@ -849,6 +905,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--user-profile-index", type=int, help="Optionaler Benutzerprofil-Index fuer FIT")
     parser.add_argument("--bmi", type=float, help="Optionales experimentelles BMI-Feld")
     parser.add_argument(
+        "--check", "-c",
+        action="store_true",
+        help="Zeigt den letzten Exportzeitpunkt aus .last_check an (Google Drive, lokal oder neu erstellt)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Eingaben pruefen und anzeigen, was exportiert wuerde, ohne FIT-Datei zu schreiben oder `.last_check` zu aktualisieren",
@@ -869,6 +930,42 @@ def main(argv: list[str]) -> int:
     """Steuert den gesamten Ablauf: Eingabe laden, filtern, FIT bauen und speichern."""
     args = parse_args(argv)
     configure_logging(args.verbose)
+
+    # --check Modus: Nur letzten Exportzeitpunkt anzeigen
+    if args.check:
+        local_last_check_path = pathlib.Path(".last_check")
+        drive_service: object | None = None
+        folder_id: str | None = None
+
+        if args.google_oauth_client_secret_file:
+            try:
+                drive_service = create_google_drive_service(
+                    args.google_oauth_client_secret_file,
+                    args.google_oauth_token_file,
+                )
+                if args.google_drive_folder_id:
+                    folder_id = args.google_drive_folder_id
+                else:
+                    # Ordner-ID aus dem Namen auflösen (benoetigt Drive-Verbindung)
+                    try:
+                        folder_id = resolve_google_drive_folder_id(
+                            drive_service,
+                            args.google_drive_folder_id,
+                            args.google_drive_folder_name,
+                        )
+                    except Exception:
+                        folder_id = None
+            except Exception as exc:
+                print(f"Google-Drive-Verbindung fehlgeschlagen: {exc}", file=sys.stderr)
+                return 1
+
+        last_check_date = get_last_check_date(
+            drive_service=drive_service,
+            folder_id=folder_id,
+            local_path=local_last_check_path,
+        )
+        print(f"Letzter Exportzeitpunkt: {last_check_date.isoformat()}")
+        return 0
 
     measurements: list[Measurement]
     csv_path: pathlib.Path | None = None
