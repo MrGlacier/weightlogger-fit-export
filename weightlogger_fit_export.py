@@ -450,14 +450,40 @@ def find_drive_folder_by_name(drive_service, folder_name: str) -> dict | None:
     return files[0] if files else None
 
 
+def find_latest_csv_in_folder(drive_service, folder_id: str) -> dict | None:
+    """Sucht die neueste CSV-Datei im Google-Drive-Ordner nach createdTime sortiert.
+
+    Diese Funktion durchsucht den angegebenen Google-Drive-Ordner nach allen CSV-Dateien
+    und gibt diejenige zurueck, die am spaetesten erstellt wurde. Leere Ergebnisse
+    oder Fehler werden als None zurueckgegeben.
+    """
+    query = (
+        f"'{folder_id}' in parents and name like '%.csv' and trashed = false"
+    )
+    response = drive_service.files().list(
+        q=query,
+        spaces="drive",
+        fields="files(id, name, createdTime)",
+        orderBy="createdTime desc",
+        pageSize=10,
+    ).execute()
+    files = response.get("files", [])
+    if files:
+        LOGGER.info("Neueste CSV-Datei in Drive gefunden: %s (%s)", files[0]["name"], files[0]["createdTime"])
+    else:
+        LOGGER.info("Keine CSV-Dateien im Google-Drive-Ordner %s gefunden", folder_id)
+    return files[0] if files else None
+
+
 def resolve_google_drive_targets(
     drive_service,
     csv_file_id: str | None,
     folder_id: str | None,
     folder_name: str | None,
     csv_file_name: str | None,
+    use_latest_csv: bool = False,
 ) -> tuple[str, str]:
-    """Loest CSV-Datei und Zielordner auf, egal ob ueber Namen oder direkte IDs."""
+    """Loest CSV-Datei und Zielordner auf, egal ob ueber Namen, ID oder neueste Datei."""
     resolved_folder_id = folder_id
     if resolved_folder_id is None:
         if not folder_name:
@@ -470,7 +496,14 @@ def resolve_google_drive_targets(
         resolved_folder_id = folder["id"]
 
     resolved_csv_file_id = csv_file_id
-    if resolved_csv_file_id is None:
+    if resolved_csv_file_id is None and use_latest_csv:
+        # Neueste CSV-Datei automatisch suchen
+        latest_csv = find_latest_csv_in_folder(drive_service, resolved_folder_id)
+        if latest_csv is None:
+            raise ValueError("Keine CSV-Dateien im Google-Drive-Ordner gefunden")
+        resolved_csv_file_id = latest_csv["id"]
+        LOGGER.info("Automatisch neueste CSV gewaehlt: %s", latest_csv["name"])
+    elif resolved_csv_file_id is None:
         if not csv_file_name:
             raise ValueError(
                 "Entweder --google-drive-csv-file-id oder --google-drive-csv-file-name muss gesetzt sein."
@@ -910,6 +943,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Zeigt den letzten Exportzeitpunkt aus .last_check an (Google Drive, lokal oder neu erstellt)",
     )
     parser.add_argument(
+        "--last-csv", "-l",
+        action="store_true",
+        help="Verwendet die neueste CSV-Datei im Drive-Ordner (nach createdTime)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Eingaben pruefen und anzeigen, was exportiert wuerde, ohne FIT-Datei zu schreiben oder `.last_check` zu aktualisieren",
@@ -993,6 +1031,7 @@ def main(argv: list[str]) -> int:
                 args.google_drive_folder_id,
                 args.google_drive_folder_name,
                 args.google_drive_csv_file_name,
+                use_latest_csv=args.last_csv,
             )
             csv_content = download_drive_file_content(drive_service, resolved_csv_file_id)
             measurements = load_measurements_from_csv_content(csv_content)
@@ -1005,6 +1044,25 @@ def main(argv: list[str]) -> int:
             return 1
     elif args.csv_path:
         csv_path = pathlib.Path(args.csv_path)
+        try:
+            measurements = load_measurements_from_csv(csv_path)
+            measurements = filter_complete_measurements(measurements)
+        except Exception as exc:
+            print(f"CSV-Fehler: {exc}", file=sys.stderr)
+            return 1
+    elif args.last_csv:
+        # Lokale neueste CSV-Datei suchen
+        csv_directory = pathlib.Path.cwd()
+        csv_files = sorted(
+            csv_directory.glob("*.csv"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if not csv_files:
+            print("Keine CSV-Dateien im aktuellen Verzeichnis gefunden.", file=sys.stderr)
+            return 1
+        csv_path = csv_files[0]
+        LOGGER.info("Neueste lokale CSV gewaehlt: %s", csv_path.name)
         try:
             measurements = load_measurements_from_csv(csv_path)
             measurements = filter_complete_measurements(measurements)

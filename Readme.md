@@ -122,6 +122,20 @@ python weightlogger_fit_export.py \
   --check
 ```
 
+## Neueste CSV-Datei verwenden
+
+Mit `--last-csv` (oder `-l`) wird automatisch die neueste CSV-Datei verwendet. In Google Drive nach `createdTime`, lokal nach Änderungsdatum (`st_mtime`):
+
+```bash
+# Neueste lokale CSV
+python weightlogger_fit_export.py -l --output latest.fit
+
+# Neueste CSV aus Google Drive
+python weightlogger_fit_export.py \
+  --google-oauth-client-secret-file client_secret.json \
+  -l --output latest.fit
+```
+
 ## Unterstützte CSV-Spalten
 
 | FitDays+-Spalte | Englischer Feldname | Verwendung |
@@ -175,6 +189,7 @@ Falls `Körperbau` fehlt, berechnet das Skript heuristisch einen Wert von 1 bis 
 | `--bmi` | optionales, experimentelles BMI-Feld |
 | `--check`, `-c` | zeigt den letzten Exportzeitpunkt aus `.last_check` an (Google Drive, lokal oder neu erstellt) |
 | `--dry-run` | prüfen, ohne FIT-Datei oder `.last_check` zu verändern |
+| `--last-csv`, `-l` | verwendet die neueste CSV-Datei (Drive: nach createdTime, lokal: nach Änderungsdatum) |
 | `--verbose` | zusätzliche Protokollausgaben |
 
 Die vollständige Parameterliste zeigt:
