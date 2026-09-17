@@ -123,6 +123,7 @@ CSV_HEADER_ALIASES: dict[str, tuple[str, ...]] = {
 }
 LOGGER = logging.getLogger(__name__)
 
+
 @dataclass
 class Measurement:
     timestamp: dt.datetime
@@ -139,6 +140,7 @@ class Measurement:
     user_profile_index: int | None = None
     bmi: float | None = None
 
+
 # `Measurement` ist das zentrale Datenobjekt des Scripts.
 # Hier landen alle Messwerte in normalisierter Form, bevor sie spaeter
 # in FIT-Datensaetze umgewandelt werden.
@@ -152,11 +154,9 @@ def configure_logging(verbose: bool) -> None:
     )
 
 
-
 def csv_row_is_empty(row: dict[str, str | None]) -> bool:
     """Prueft, ob eine CSV-Zeile komplett leer ist und ignoriert werden kann."""
     return all((value or "").strip() == "" for value in row.values())
-
 
 
 def ensure_required_csv_columns(fieldnames: list[str] | None) -> None:
@@ -165,9 +165,7 @@ def ensure_required_csv_columns(fieldnames: list[str] | None) -> None:
         raise ValueError("CSV-Datei ist leer")
 
     missing_columns = [
-        logical_name
-        for logical_name in REQUIRED_CSV_COLUMNS
-        if find_csv_column_name(fieldnames, logical_name) is None
+        logical_name for logical_name in REQUIRED_CSV_COLUMNS if find_csv_column_name(fieldnames, logical_name) is None
     ]
     if missing_columns:
         missing_columns_text = ", ".join(sorted(missing_columns))
@@ -212,12 +210,7 @@ def parse_measurement_float(raw_value: str) -> float | None:
     normalized = raw_value.strip()
     if normalized == "" or normalized == "--":
         return None
-    normalized = (
-        normalized.replace("kg", "")
-        .replace("%", "")
-        .replace("kcal", "")
-        .strip()
-    )
+    normalized = normalized.replace("kg", "").replace("%", "").replace("kcal", "").strip()
     normalized = normalized.replace(",", ".")
     return float(normalized)
 
@@ -286,7 +279,6 @@ def parse_csv_timestamp(raw: str) -> dt.datetime:
     raise argparse.ArgumentTypeError(f"Ungueltiger Zeitstempel: {raw}")
 
 
-
 def use_google_drive_input(args: argparse.Namespace) -> bool:
     """Erkennt, ob das Script im Google-Drive-Modus statt mit lokaler CSV laufen soll."""
     return any(
@@ -314,7 +306,6 @@ def require_google_drive_dependencies() -> None:
             "Google-Drive-Unterstuetzung benoetigt 'google-api-python-client', 'google-auth' und 'google-auth-oauthlib'. "
             "Installation: pip install google-api-python-client google-auth google-auth-oauthlib"
         )
-
 
 
 def create_google_drive_service(
@@ -349,7 +340,6 @@ def create_google_drive_service(
     return build("drive", "v3", credentials=credentials)
 
 
-
 def download_drive_file_content(drive_service, file_id: str) -> str:
     """Laedt den kompletten Inhalt einer Google-Drive-Datei als Text herunter."""
     request = drive_service.files().get_media(fileId=file_id)
@@ -359,7 +349,6 @@ def download_drive_file_content(drive_service, file_id: str) -> str:
     while not done:
         _, done = downloader.next_chunk()
     return buffer.getvalue().decode("utf-8")
-
 
 
 def load_measurements_from_csv_content(content: str) -> list[Measurement]:
@@ -414,20 +403,20 @@ def load_measurements_from_csv_content(content: str) -> list[Measurement]:
     return measurements
 
 
-
-
 def find_drive_file_in_folder(drive_service, folder_id: str, file_name: str) -> dict | None:
     """Sucht eine Datei mit einem bestimmten Namen innerhalb eines Google-Drive-Ordners."""
     escaped_file_name = file_name.replace("'", "\\'")
-    query = (
-        f"'{folder_id}' in parents and name = '{escaped_file_name}' and trashed = false"
+    query = f"'{folder_id}' in parents and name = '{escaped_file_name}' and trashed = false"
+    response = (
+        drive_service.files()
+        .list(
+            q=query,
+            spaces="drive",
+            fields="files(id, name)",
+            pageSize=1,
+        )
+        .execute()
     )
-    response = drive_service.files().list(
-        q=query,
-        spaces="drive",
-        fields="files(id, name)",
-        pageSize=1,
-    ).execute()
     files = response.get("files", [])
     return files[0] if files else None
 
@@ -435,17 +424,18 @@ def find_drive_file_in_folder(drive_service, folder_id: str, file_name: str) -> 
 def find_drive_folder_by_name(drive_service, folder_name: str) -> dict | None:
     """Sucht einen Google-Drive-Ordner ueber seinen Namen."""
     escaped_folder_name = folder_name.replace("'", "\\'")
-    query = (
-        "mimeType = 'application/vnd.google-apps.folder' "
-        f"and name = '{escaped_folder_name}' and trashed = false"
+    query = "mimeType = 'application/vnd.google-apps.folder' " f"and name = '{escaped_folder_name}' and trashed = false"
+    response = (
+        drive_service.files()
+        .list(
+            q=query,
+            spaces="drive",
+            fields="files(id, name, createdTime)",
+            orderBy="createdTime desc",
+            pageSize=1,
+        )
+        .execute()
     )
-    response = drive_service.files().list(
-        q=query,
-        spaces="drive",
-        fields="files(id, name, createdTime)",
-        orderBy="createdTime desc",
-        pageSize=1,
-    ).execute()
     files = response.get("files", [])
     return files[0] if files else None
 
@@ -457,16 +447,18 @@ def find_latest_csv_in_folder(drive_service, folder_id: str) -> dict | None:
     und gibt diejenige zurueck, die am spaetesten erstellt wurde. Leere Ergebnisse
     oder Fehler werden als None zurueckgegeben.
     """
-    query = (
-        f"'{folder_id}' in parents and name like '%.csv' and trashed = false"
+    query = f"'{folder_id}' in parents and name like '%.csv' and trashed = false"
+    response = (
+        drive_service.files()
+        .list(
+            q=query,
+            spaces="drive",
+            fields="files(id, name, createdTime)",
+            orderBy="createdTime desc",
+            pageSize=10,
+        )
+        .execute()
     )
-    response = drive_service.files().list(
-        q=query,
-        spaces="drive",
-        fields="files(id, name, createdTime)",
-        orderBy="createdTime desc",
-        pageSize=10,
-    ).execute()
     files = response.get("files", [])
     if files:
         LOGGER.info("Neueste CSV-Datei in Drive gefunden: %s (%s)", files[0]["name"], files[0]["createdTime"])
@@ -487,9 +479,7 @@ def resolve_google_drive_targets(
     resolved_folder_id = folder_id
     if resolved_folder_id is None:
         if not folder_name:
-            raise ValueError(
-                "Entweder --google-drive-folder-id oder --google-drive-folder-name muss gesetzt sein."
-            )
+            raise ValueError("Entweder --google-drive-folder-id oder --google-drive-folder-name muss gesetzt sein.")
         folder = find_drive_folder_by_name(drive_service, folder_name)
         if folder is None:
             raise ValueError(f"Google-Drive-Ordner nicht gefunden: {folder_name}")
@@ -505,18 +495,14 @@ def resolve_google_drive_targets(
         LOGGER.info("Automatisch neueste CSV gewaehlt: %s", latest_csv["name"])
     elif resolved_csv_file_id is None:
         if not csv_file_name:
-            raise ValueError(
-                "Entweder --google-drive-csv-file-id oder --google-drive-csv-file-name muss gesetzt sein."
-            )
+            raise ValueError("Entweder --google-drive-csv-file-id oder --google-drive-csv-file-name muss gesetzt sein.")
         csv_file = find_drive_file_in_folder(
             drive_service,
             resolved_folder_id,
             csv_file_name,
         )
         if csv_file is None:
-            raise ValueError(
-                f"Google-Drive-CSV-Datei im Ordner '{resolved_folder_id}' nicht gefunden: {csv_file_name}"
-            )
+            raise ValueError(f"Google-Drive-CSV-Datei im Ordner '{resolved_folder_id}' nicht gefunden: {csv_file_name}")
         resolved_csv_file_id = csv_file["id"]
 
     LOGGER.info("Google-Drive-Ordner aufgeloest: %s", resolved_folder_id)
@@ -533,9 +519,7 @@ def resolve_google_drive_folder_id(
     resolved_folder_id = folder_id
     if resolved_folder_id is None:
         if not folder_name:
-            raise ValueError(
-                "Entweder --google-drive-folder-id oder --google-drive-folder-name muss gesetzt sein."
-            )
+            raise ValueError("Entweder --google-drive-folder-id oder --google-drive-folder-name muss gesetzt sein.")
         folder = find_drive_folder_by_name(drive_service, folder_name)
         if folder is None:
             raise ValueError(f"Google-Drive-Ordner nicht gefunden: {folder_name}")
@@ -543,7 +527,6 @@ def resolve_google_drive_folder_id(
 
     LOGGER.info("Google-Drive-Ordner aufgeloest: %s", resolved_folder_id)
     return resolved_folder_id
-
 
 
 def read_last_check_from_drive(drive_service, folder_id: str) -> dt.datetime | None:
@@ -559,7 +542,6 @@ def read_last_check_from_drive(drive_service, folder_id: str) -> dt.datetime | N
     parsed_timestamp = parse_timestamp(raw_value)
     LOGGER.info("Letzter Exportzeitpunkt geladen: %s", parsed_timestamp.isoformat())
     return parsed_timestamp
-
 
 
 def write_last_check_to_drive(drive_service, folder_id: str, timestamp: dt.datetime) -> None:
@@ -625,8 +607,6 @@ def get_last_check_date(
     return now
 
 
-
-
 def filter_new_measurements(
     measurements: list[Measurement],
     last_check_timestamp: dt.datetime | None,
@@ -690,10 +670,22 @@ def filter_complete_measurements(measurements: list[Measurement]) -> list[Measur
 def fit_crc(data: bytes) -> int:
     """Berechnet die CRC-Pruefsumme fuer FIT-Header und FIT-Dateiinhalt."""
     crc_table = (
-        0x0000, 0xCC01, 0xD801, 0x1400,
-        0xF001, 0x3C00, 0x2800, 0xE401,
-        0xA001, 0x6C00, 0x7800, 0xB401,
-        0x5000, 0x9C01, 0x8801, 0x4400,
+        0x0000,
+        0xCC01,
+        0xD801,
+        0x1400,
+        0xF001,
+        0x3C00,
+        0x2800,
+        0xE401,
+        0xA001,
+        0x6C00,
+        0x7800,
+        0xB401,
+        0x5000,
+        0x9C01,
+        0x8801,
+        0x4400,
     )
     crc = 0
     for byte in data:
@@ -721,7 +713,9 @@ def build_header(data_size: int) -> bytes:
     return header_without_crc + struct.pack("<H", header_crc)
 
 
-def definition_record(local_message_number: int, global_message_number: int, fields: list[tuple[int, int, int]]) -> bytes:
+def definition_record(
+    local_message_number: int, global_message_number: int, fields: list[tuple[int, int, int]]
+) -> bytes:
     """Erzeugt einen FIT-Definitionsdatensatz fuer die nachfolgenden Datensaetze."""
     payload = bytearray()
     payload.append(0x40 | (local_message_number & 0x0F))
@@ -804,7 +798,7 @@ def load_measurements_from_csv(path: pathlib.Path) -> list[Measurement]:
         return load_measurements_from_csv_content(handle.read())
 
 
- # Ab hier wird das eigentliche FIT-Dateiformat aufgebaut.
+# Ab hier wird das eigentliche FIT-Dateiformat aufgebaut.
 # Ab hier wird das eigentliche FIT-Dateiformat aufgebaut.
 # Zuerst werden Definitionen fuer die enthaltenen Nachrichtentypen geschrieben,
 # danach folgen die eigentlichen Messdaten als Datensaetze.
@@ -902,7 +896,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Google-Drive-Datei-ID der CSV-Eingabedatei",
     )
     parser.add_argument(
-        "--google-drive-csv-file-name", "-f",
+        "--google-drive-csv-file-name",
+        "-f",
         default="Gewicht.csv",
         help="Dateiname der CSV-Eingabedatei innerhalb des Zielordners in Google Drive",
     )
@@ -911,7 +906,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Google-Drive-Ordner-ID, in dem `.last_check` gespeichert wird",
     )
     parser.add_argument(
-        "--google-drive-folder-name", "-d",
+        "--google-drive-folder-name",
+        "-d",
         default="FitDays-Export",
         help="Google-Drive-Ordnername, in dem CSV-Datei und `.last_check` liegen",
     )
@@ -931,19 +927,23 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--percent-hydration", type=float, help="Koerperwasser eines einzelnen Messwerts in Prozent")
     parser.add_argument("--muscle-mass", type=float, help="Muskelmasse eines einzelnen Messwerts in kg")
     parser.add_argument("--daily-calorie-intake", type=float, help="Grundumsatz eines einzelnen Messwerts in kcal")
-    parser.add_argument("--physique-rating", type=int, help="Koerperbau-Bewertung eines einzelnen Messwerts von 1 bis 9")
+    parser.add_argument(
+        "--physique-rating", type=int, help="Koerperbau-Bewertung eines einzelnen Messwerts von 1 bis 9"
+    )
     parser.add_argument("--visceral-fat-rating", type=int, help="Eingeweidefett-Bewertung eines einzelnen Messwerts")
     parser.add_argument("--bone-mass", type=float, help="Knochengewicht eines einzelnen Messwerts in kg")
     parser.add_argument("--metabolic-age", type=int, help="Koerperalter eines einzelnen Messwerts")
     parser.add_argument("--user-profile-index", type=int, help="Optionaler Benutzerprofil-Index fuer FIT")
     parser.add_argument("--bmi", type=float, help="Optionales experimentelles BMI-Feld")
     parser.add_argument(
-        "--check", "-c",
+        "--check",
+        "-c",
         action="store_true",
         help="Zeigt den letzten Exportzeitpunkt aus .last_check an (Google Drive, lokal oder neu erstellt)",
     )
     parser.add_argument(
-        "--last-csv", "-l",
+        "--last-csv",
+        "-l",
         action="store_true",
         help="Verwendet die neueste CSV-Datei im Drive-Ordner (nach createdTime)",
     )
@@ -960,7 +960,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
- # `main` ist der Einstiegspunkt fuer den kompletten Ablauf.
 # `main` ist der Einstiegspunkt fuer den kompletten Ablauf.
 # Hier wird entschieden, ob aus lokaler CSV, Google Drive oder aus direkter CLI-Eingabe gelesen wird.
 # Danach werden neue Werte gefiltert, optional ein Dry-Run ausgefuehrt und am Ende die FIT-Datei geschrieben.
@@ -1078,13 +1077,21 @@ def main(argv: list[str]) -> int:
             return 2
         calculated_physique_rating = args.physique_rating
         if calculated_physique_rating is None:
-            skeletal_muscle_rate = None if args.muscle_mass is None or args.weight is None else round((args.muscle_mass / args.weight) * 100, 1)
+            skeletal_muscle_rate = (
+                None
+                if args.muscle_mass is None or args.weight is None
+                else round((args.muscle_mass / args.weight) * 100, 1)
+            )
             calculated_physique_rating = calculate_physique_rating(args.percent_fat, skeletal_muscle_rate)
         measurements = [
             Measurement(
                 timestamp=args.timestamp,
                 weight=args.weight,
-                skeletal_muscle_rate=None if args.muscle_mass is None or args.weight is None else round((args.muscle_mass / args.weight) * 100, 1),
+                skeletal_muscle_rate=(
+                    None
+                    if args.muscle_mass is None or args.weight is None
+                    else round((args.muscle_mass / args.weight) * 100, 1)
+                ),
                 percent_fat=args.percent_fat,
                 percent_hydration=args.percent_hydration,
                 muscle_mass=args.muscle_mass,
@@ -1105,9 +1112,7 @@ def main(argv: list[str]) -> int:
 
     measurements = sorted(measurements, key=lambda measurement: measurement.timestamp)
     include_bmi = any(measurement.bmi is not None for measurement in measurements)
-    newest_measurement_timestamp = max(
-        measurement.timestamp for measurement in measurements
-    )
+    newest_measurement_timestamp = max(measurement.timestamp for measurement in measurements)
 
     if args.dry_run:
         print(
@@ -1134,9 +1139,7 @@ def main(argv: list[str]) -> int:
             print(f"{LAST_CHECK_FILE_NAME} in Google Drive konnte nicht aktualisiert werden: {exc}", file=sys.stderr)
             return 1
 
-    print(
-        f"Geschrieben: {output_path} ({len(measurements)} Messwert(e), {len(fit_bytes)} Bytes)"
-    )
+    print(f"Geschrieben: {output_path} ({len(measurements)} Messwert(e), {len(fit_bytes)} Bytes)")
     return 0
 
 
