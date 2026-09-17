@@ -447,7 +447,7 @@ def find_latest_csv_in_folder(drive_service, folder_id: str) -> dict | None:
     und gibt diejenige zurueck, die am spaetesten erstellt wurde. Leere Ergebnisse
     oder Fehler werden als None zurueckgegeben.
     """
-    query = f"'{folder_id}' in parents and name like '%.csv' and trashed = false"
+    query = f"'{folder_id}' in parents and name contains '.csv' and trashed = false"
     response = (
         drive_service.files()
         .list(
